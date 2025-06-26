@@ -73,7 +73,7 @@ class BLELockClient:
             return False
         
         # Find device using filter
-        target_device = await BleakScanner.find_device_by_filter(device_filter, timeout=10.0)
+        target_device = await BleakScanner.find_device_by_filter(device_filter, timeout=15.0)
              
         if not target_device:
             raise ConnectionError(f"Could not find BLE device with serial {serial} using manufacturer data filtering")
