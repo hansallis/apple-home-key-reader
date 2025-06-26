@@ -13,7 +13,7 @@ class LockAPIClient:
     def __init__(self, api_base_url: str = "http://localhost:8080"):
         self.api_base_url = api_base_url.rstrip('/')
         
-    async def initiate_lock_activation(self, endpoint_id: str) -> Optional[Tuple[int, list[int]]]:
+    async def initiate_lock_activation(self, issuer_id: str) -> Optional[Tuple[int, list[int]]]:
         """
         Initiate lock activation sequence.
         
@@ -21,7 +21,7 @@ class LockAPIClient:
             Tuple of (serial, initial_message) if successful, None if failed
         """
         payload = {
-            "endpointId": endpoint_id
+            "issuerId": issuer_id
         }
         
         try:

@@ -88,13 +88,19 @@ class Service:
 
     async def _activate_lock_via_ble(self, endpoint):
         """Activate physical lock via BLE connection"""
-        endpoint_id = endpoint.id.hex()
+        # Find the issuer for this endpoint
+        issuer = self.repository.get_issuer_by_endpoint(endpoint)
+        if issuer is None:
+            log.error(f"Could not find issuer for endpoint {endpoint.id.hex()}")
+            return False
+            
+        issuer_id = issuer.id.hex()
             
         try:
-            log.info(f"Initiating lock activation for endpoint {endpoint_id}")
+            log.info(f"Initiating lock activation for issuer {issuer_id}")
             
             # Call API to get lock serial and initial handshake data
-            api_result = await self.api_client.initiate_lock_activation(endpoint_id)
+            api_result = await self.api_client.initiate_lock_activation(issuer_id)
             if api_result is None:
                 log.error("Failed to get lock activation data from API")
                 return False

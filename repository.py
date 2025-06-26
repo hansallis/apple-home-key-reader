@@ -122,6 +122,12 @@ class Repository:
             (issuer for issuer in self.get_all_issuers() if issuer.id == id), None
         )
 
+    def get_issuer_by_endpoint(self, endpoint: Endpoint) -> Optional[Issuer]:
+        return next(
+            (issuer for issuer in self.get_all_issuers() 
+             if any(ep.id == endpoint.id for ep in issuer.endpoints)), None
+        )
+
     def remove_issuer(self, issuer: Issuer):
         with self._transaction_lock:
             issuers = [i for i in copy.deepcopy(self._issuers) if i.id != issuer.id]
