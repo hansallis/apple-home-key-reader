@@ -16,9 +16,11 @@
 
     "homekey": {
         "persist": "homekey.json",
+        "use_api_repository": false,
         "express": true,
         "finish": "silver",
         "flow": "fast",
-        "api_base_url": "https://clubtoegang.lamdera.app"
+        "api_base_url": "https://clubtoegang.lamdera.app",
+        "api_secret": ""
     }
 }

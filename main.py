@@ -7,6 +7,7 @@ from pyhap.accessory_driver import AccessoryDriver
 
 from accessory import Lock
 from repository import Repository
+from api_repository import APIRepository
 from service import Service
 from util.bfclf import BroadcastFrameContactlessFrontend
 
@@ -51,16 +52,26 @@ def configure_nfc_device(config: dict):
 
 
 def configure_homekey_service(config: dict, nfc_device, repository=None):
+    # Choose repository type based on configuration
+    if repository is None:
+        if config.get("use_api_repository", False):
+            repository = APIRepository(
+                config.get("api_base_url", "http://localhost:8080"),
+                config.get("api_secret")
+            )
+        else:
+            repository = Repository(config["persist"])
+    
     service = Service(
         nfc_device,
-        repository=repository or Repository(config["persist"]),
+        repository=repository,
         express=config.get("express", True),
-        finish=config.get("finish"),
-        flow=config.get("flow"),
+        finish=config.get("finish", "default"),
+        flow=config.get("flow", "default"),
         # Poll no more than ~6 times a second by default
         throttle_polling=float(config.get("throttle_polling") or 0.15),
         api_base_url=config.get("api_base_url", "http://localhost:8080"),
-        default_lock_serial=config.get("default_lock_serial"),
+        default_lock_serial=config.get("default_lock_serial", 0),
     )
     return service
 

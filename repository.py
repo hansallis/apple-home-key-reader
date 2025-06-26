@@ -151,6 +151,8 @@ class Repository:
             issuer = next(
                 (issuer for issuer in self._issuers if issuer.id == issuer_id), None
             )
+            if issuer is None:
+                return
             endpoints = [
                 (e if e.id != endpoint.id else endpoint) for e in issuer.endpoints
             ]
@@ -160,10 +162,10 @@ class Repository:
             self._refresh_state()
 
     def upsert_issuers(self, issuers: List[Issuer]):
-        issuers = {issuer.id: copy.deepcopy(issuer) for issuer in issuers}
+        issuers_dict = {issuer.id: copy.deepcopy(issuer) for issuer in issuers}
         with self._transaction_lock:
-            iss = [issuers.get(i.id, i) for i in copy.deepcopy(self._issuers)]
-            for issuer in issuers.values():
+            iss = [issuers_dict.get(i.id, i) for i in copy.deepcopy(self._issuers)]
+            for issuer in issuers_dict.values():
                 if issuer not in iss:
                     iss.append(issuer)
             self._issuers = iss
