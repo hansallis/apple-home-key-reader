@@ -1,8 +1,10 @@
+import asyncio
 import base64
 import logging
 import time
 import os
 from operator import attrgetter
+from threading import Thread
 
 from entity import (
     Issuer,
@@ -34,6 +36,8 @@ from util.ecp import ECP
 from util.iso7816 import ISO7816Tag
 from util.threads import create_runner
 from util.structable import pack_into_base64_string, unpack_from_base64_string
+from ble_client import BLELockManager
+from api_client import LockAPIClient
 
 log = logging.getLogger()
 
@@ -46,12 +50,23 @@ class Service:
         express: bool = True,
         finish: str = "silver",
         flow: str = "fast",
-        throttle_polling = 0.1
+        throttle_polling = 0.1,
+        api_base_url: str = "http://localhost:8080",
+        default_lock_serial: int = None  # Deprecated - serial now comes from API
     ) -> None:
         self.repository = repository
         self.clf = clf
         self.throttle_polling = throttle_polling
         self.express = express in (True, "True", "true", "1")
+        self.default_lock_serial = default_lock_serial
+
+        # Initialize BLE and API clients
+        self.api_client = LockAPIClient(api_base_url)
+        self.ble_manager = BLELockManager(api_base_url)
+        
+        # Event loop for async operations
+        self._event_loop = None
+        self._event_loop_thread = None
 
         try:
             self.hardware_finish_color = HardwareFinishColor[finish.upper()]
@@ -71,11 +86,76 @@ class Service:
         self._run_flag = True
         self._runner = None
 
+    async def _activate_lock_via_ble(self, endpoint):
+        """Activate physical lock via BLE connection"""
+        endpoint_id = endpoint.id.hex()
+            
+        try:
+            log.info(f"Initiating lock activation for endpoint {endpoint_id}")
+            
+            # Call API to get lock serial and initial handshake data
+            api_result = await self.api_client.initiate_lock_activation(endpoint_id)
+            if api_result is None:
+                log.error("Failed to get lock activation data from API")
+                return False
+                
+            serial, initial_message = api_result
+            
+            # Initiate BLE connection and send initial message
+            try:
+                await self.ble_manager.initiate_connection(serial, initial_message)
+                log.info(f"Successfully initiated BLE connection to lock {serial}")
+                return True
+                
+            except Exception as e:
+                log.error(f"Failed to connect to BLE lock {serial}: {e}")
+                return False
+                
+        except Exception as e:
+            log.error(f"Error during lock activation: {e}")
+            return False
+    
     def on_endpoint_authenticated(self, endpoint):
         """This method will be called when an endpoint is authenticated"""
-        # Currently overwritten by accessory.py
+        log.info(f"HomeKey endpoint authenticated: {endpoint}")
+        
+        # Instead of toggling HomeKit lock state, activate physical lock via BLE
+        if self._event_loop is not None:
+            future = asyncio.run_coroutine_threadsafe(
+                self._activate_lock_via_ble(endpoint),
+                self._event_loop
+            )
+            
+            # Don't block the NFC thread, but log the result
+            def log_result(future):
+                try:
+                    result = future.result(timeout=1)
+                    if result:
+                        log.info("Lock activation completed successfully")
+                    else:
+                        log.error("Lock activation failed")
+                except Exception as e:
+                    log.error(f"Lock activation error: {e}")
+                    
+            future.add_done_callback(lambda f: log_result(f))
+        else:
+            log.error("Event loop not available for BLE activation")
+
+    def _start_event_loop(self):
+        """Start the event loop in a separate thread for async operations"""
+        self._event_loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(self._event_loop)
+        self._event_loop.run_forever()
 
     def start(self):
+        # Start async event loop in separate thread
+        self._event_loop_thread = Thread(target=self._start_event_loop, daemon=True)
+        self._event_loop_thread.start()
+        
+        # Wait for event loop to be ready
+        while self._event_loop is None:
+            time.sleep(0.01)
+            
         self._runner = create_runner(
             name="homekey",
             target=self.run,
@@ -89,6 +169,17 @@ class Service:
         self._run_flag = False
         if self._runner is not None:
             self._runner.join()
+            
+        # Clean up async resources
+        if self._event_loop is not None:
+            asyncio.run_coroutine_threadsafe(
+                self.ble_manager.disconnect_all(),
+                self._event_loop
+            ).result(timeout=5)
+            self._event_loop.call_soon_threadsafe(self._event_loop.stop)
+            
+        if self._event_loop_thread is not None:
+            self._event_loop_thread.join(timeout=5)
 
     def update_hap_pairings(self, issuer_public_keys):
         issuers = {

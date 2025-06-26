@@ -59,6 +59,8 @@ def configure_homekey_service(config: dict, nfc_device, repository=None):
         flow=config.get("flow"),
         # Poll no more than ~6 times a second by default
         throttle_polling=float(config.get("throttle_polling") or 0.15),
+        api_base_url=config.get("api_base_url", "http://localhost:8080"),
+        default_lock_serial=config.get("default_lock_serial"),
     )
     return service
 

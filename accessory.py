@@ -21,19 +21,19 @@ class Lock(Accessory):
         self._lock_current_state = lock_state_at_startup
 
         self.service = service
-        self.service.on_endpoint_authenticated = self.on_endpoint_authenticated
+        # Don't override the service's endpoint authentication - let service handle BLE activation
         self.add_lock_service()
         self.add_nfc_access_service()
         self.add_unpair_hook()
 
     def on_endpoint_authenticated(self, endpoint):
-        self._lock_target_state = 0 if self._lock_current_state else 1
-        log.info(
-            f"Toggling lock state due to endpoint authentication event {self._lock_target_state} -> {self._lock_current_state} {endpoint}"
-        )
-        self.lock_target_state.set_value(self._lock_target_state, should_notify=True)
-        self._lock_current_state = self._lock_target_state
-        self.lock_current_state.set_value(self._lock_current_state, should_notify=True)
+        """
+        This method is no longer used as lock operation has been moved to service.py via BLE.
+        HomeKit lock state changes are disabled.
+        """
+        log.info(f"HomeKey endpoint authenticated (HomeKit lock state changes disabled): {endpoint}")
+        # Lock state changes are now handled by service.py via BLE connection
+        # HomeKit accessory lock state remains unchanged
 
     def add_unpair_hook(self):
         unpair = self.driver.unpair
@@ -132,9 +132,9 @@ class Lock(Accessory):
         return self._lock_target_state
 
     def set_lock_target_state(self, value):
-        log.info(f"set_lock_target_state {value}")
-        self._lock_target_state = self._lock_current_state = value
-        self.lock_current_state.set_value(self._lock_current_state, should_notify=True)
+        log.info(f"set_lock_target_state {value} - DISABLED: Lock can only be operated via HomeKey NFC")
+        # Do not change lock state - lock operation is disabled via HomeKit
+        # Lock can only be operated via authenticated HomeKey NFC
         return self._lock_target_state
 
     def get_lock_version(self):
