@@ -162,6 +162,16 @@ class Service:
         while self._event_loop is None:
             time.sleep(0.01)
             
+        # Start BLE device registry for faster connections
+        async def start_ble_registry():
+            try:
+                await self.ble_manager.start()
+                log.info("BLE device registry started successfully")
+            except Exception as e:
+                log.error(f"Failed to start BLE device registry: {e}")
+        
+        asyncio.run_coroutine_threadsafe(start_ble_registry(), self._event_loop)
+            
         self._runner = create_runner(
             name="homekey",
             target=self.run,
@@ -178,10 +188,17 @@ class Service:
             
         # Clean up async resources
         if self._event_loop is not None:
+            async def cleanup_ble():
+                try:
+                    await self.ble_manager.stop()
+                    log.info("BLE device registry stopped")
+                except Exception as e:
+                    log.error(f"Error stopping BLE device registry: {e}")
+            
             asyncio.run_coroutine_threadsafe(
-                self.ble_manager.disconnect_all(),
+                cleanup_ble(),
                 self._event_loop
-            ).result(timeout=5)
+            ).result(timeout=10)
             self._event_loop.call_soon_threadsafe(self._event_loop.stop)
             
         if self._event_loop_thread is not None:
@@ -277,11 +294,14 @@ class Service:
         log.info("Connecting to the NFC reader...")
 
         self.clf.device = None
-        self.clf.open(self.clf.path)
-        if self.clf.device is None:
-            raise Exception(
-                f"Could not connect to NFC device {self.clf} at {self.clf.path}"
-            )
+        while self._run_flag:
+            self.clf.open(self.clf.path)
+            if self.clf.device is not None:
+                break
+            log.warning(f"Could not connect to NFC device {self.clf} at {self.clf.path}, retrying in 10 seconds...")
+            time.sleep(10)
+            if not self._run_flag:
+                return
 
         while self._run_flag:
             self._read_homekey()
