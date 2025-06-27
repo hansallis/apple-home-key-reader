@@ -25,15 +25,12 @@ async def test_api_client():
     api_client = LockAPIClient("http://localhost:8080")
     
     # Test lock activation initiation
-    result = await api_client.initiate_lock_activation(12345, "test_endpoint_123")
+    result = await api_client.initiate_lock_activation("test_issuer_123")
     if result:
         serial, message = result
         log.info(f"API returned: serial={serial}, message={message}")
     else:
         log.error("API initiation failed")
-        
-    # Test status reporting
-    await api_client.report_lock_status(12345, "test_status", "test_endpoint_123")
 
 
 async def test_ble_scan():
@@ -69,7 +66,7 @@ async def test_ble_manager():
     
     # This will fail unless you have a real BLE device, but tests the code path
     try:
-        await ble_manager.initiate_connection(12345, [0x01, 0x02, 0x03])
+        await ble_manager.initiate_connection(12345, [0x01, 0x02, 0x03], "test_issuer_123")
         log.info("BLE connection test passed")
     except Exception as e:
         log.info(f"BLE connection test failed (expected): {e}")

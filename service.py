@@ -109,7 +109,7 @@ class Service:
             
             # Initiate BLE connection and send initial message
             try:
-                await self.ble_manager.initiate_connection(serial, initial_message)
+                await self.ble_manager.initiate_connection(serial, initial_message, issuer_id)
                 log.info(f"Successfully initiated BLE connection to lock {serial}")
                 return True
                 
