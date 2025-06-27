@@ -2,7 +2,7 @@ import asyncio
 import logging
 import json
 import time
-from typing import Optional, Callable, Dict, Any, List
+from typing import Optional, Callable, Dict, Any, List, Union
 import aiohttp
 from bleak import BleakClient, BleakScanner
 from bleak.backends.device import BLEDevice
@@ -178,12 +178,13 @@ class BLELockClient:
     UART_TX_UUID = "6E400002-B5A3-F393-E0A9-E50E24DCCA9E"  # Write to this
     UART_RX_UUID = "6E400003-B5A3-F393-E0A9-E50E24DCCA9E"  # Notifications from this
     
-    def __init__(self, api_base_url: str = "http://localhost:8080", device_registry: Optional[BLEDeviceRegistry] = None):
+    def __init__(self, api_base_url: str = "http://localhost:8080", device_registry: Optional[BLEDeviceRegistry] = None, issuer_id: Optional[str] = None):
         self.client: Optional[BleakClient] = None
         self.api_base_url = api_base_url
         self.door_serial: Optional[int] = None
         self.disconnect_callback: Optional[Callable] = None
         self.device_registry = device_registry
+        self.issuer_id = issuer_id
         
     async def connect(self, serial: int, disconnect_callback: Optional[Callable] = None):
         """Connect to BLE device with given serial number"""
@@ -301,9 +302,13 @@ class BLELockClient:
             log.error("No door serial set")
             return
             
-        payload = {
+        payload: Dict[str, Union[list[int], str]] = {
             "message": message
         }
+        
+        # Include issuer_id if available
+        if self.issuer_id:
+            payload["issuerId"] = self.issuer_id
         
         try:
             async with aiohttp.ClientSession() as session:
@@ -365,13 +370,13 @@ class BLELockManager:
         await self.disconnect_all()
         log.info("BLE Lock Manager stopped")
         
-    async def initiate_connection(self, serial: int, initial_message: list[int]):
+    async def initiate_connection(self, serial: int, initial_message: list[int], issuer_id: Optional[str] = None):
         """Initiate connection to lock and send initial message"""
         if serial in self.connections:
             log.info(f"Already connected to device {serial}")
             client = self.connections[serial]
         else:
-            client = BLELockClient(self.api_base_url, self.device_registry)
+            client = BLELockClient(self.api_base_url, self.device_registry, issuer_id)
             
             def on_disconnect():
                 if serial in self.connections:
