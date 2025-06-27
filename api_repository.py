@@ -42,6 +42,20 @@ class APIRepository(Repository):
         self._load_state_from_api()
         self._start_periodic_reading()
 
+    def _run_async_safely(self, coro):
+        """Safely run async code regardless of whether we're in an event loop"""
+        try:
+            # Check if there's already a running event loop
+            loop = asyncio.get_running_loop()
+            # If we get here, there's a running loop, so we need to run in a thread
+            import concurrent.futures
+            with concurrent.futures.ThreadPoolExecutor() as executor:
+                future = executor.submit(asyncio.run, coro)
+                return future.result()
+        except RuntimeError:
+            # No running event loop, we can use asyncio.run safely
+            return asyncio.run(coro)
+
     def _start_periodic_reading(self):
         """Start periodic reading from API every minute"""
         def _periodic_read():
@@ -64,7 +78,7 @@ class APIRepository(Repository):
         """Load state from API endpoint using POST request"""
         try:
             with self._state_lock:
-                configuration = asyncio.run(self._async_load_state())
+                configuration = self._run_async_safely(self._async_load_state())
                 if configuration is not None:
                     self._reader_private_key = bytes.fromhex(
                         configuration.get("reader_private_key", "00" * 32)
@@ -115,7 +129,7 @@ class APIRepository(Repository):
                     },
                 }
                 
-                success = asyncio.run(self._async_save_state(data))
+                success = self._run_async_safely(self._async_save_state(data))
                 if success:
                     log.debug("Successfully saved state to API")
         except Exception as e:
